@@ -1,0 +1,69 @@
+' library: https://github.com/NickWaterton/mcScript/tree/master/libraries/accelerometer/lis2dh12
+Class LISDH12_Test
+   Shared accel As LIS2DH12
+   Shared occupied As Boolean
+   Shared uid As String
+   '    Shared deviceId As String
+   Const deviceId As String = "5a0d95dba2d4850007e5a43b"
+   Shared Event Boot()
+       Lplan.SetMidPowerMode(5000)
+       occupied = False
+       uid = Device.mcUID().ToString("X8")
+       '        If uid = "00011F48" Then // Men's Big
+       '            deviceId = "5a2560dd2049b30007fa0e82"
+       '        ElseIf uid = "00011F49" Then // Men's Small
+       '            deviceId = "5a25612e2049b30007fa0e83"    
+       '        ElseIf uid = "00011F53" Then // Women's Small
+       '            deviceId = "5a25605f2049b30007fa0e81"                
+       '        ElseIf uid = "00011F52" Then // Women's Big
+       '            deviceId = "5a0d95dba2d4850007e5a43b"              
+       '        Else
+       '            Return
+       '        End If        
+       accel = New LIS2DH12
+       If accel.online Then
+           accel.Setup(LIS2DH12.LOW_POWER_MODE, LIS2DH12.DATA_RATE_25HZ, LIS2DH12.SCALE_2G) 'could use a very low data rate if you don't care about fast switching 10Hz?
+       End If        
+   End Event
+   
+   Shared Event Publish() RaiseEvent Every 10 Seconds
+       Dim accelValues As ListOfFloat = accel.GetAccel()
+       Dim PitchRoll As ListOfFloat = accel.GetPitchRollDegrees()
+       
+       // stall is occupied if roll is greater than 20
+       Dim newOccupied As Boolean = False
+       '        If uid = "00011F48" Then // Men's Big
+       '            If PitchRoll(1) > 20 Then
+       '                newOccupied = True
+       '            End If                
+       '        ElseIf uid = "00011F49" Then // Men's Small
+       '            If PitchRoll(1) > 20 Then
+       '                newOccupied = True
+       '            End If          
+       '        ElseIf uid = "00011F52" Then // Women's Big
+       If PitchRoll(1) < -20 Then
+           newOccupied = True
+       End If                
+       '        ElseIf uid = "00011F53" Then // Women's Small
+       '            If PitchRoll(1) < -20 Then
+       '                newOccupied = True
+       '            End If                
+       '        Else
+       '            Return
+       '        End If
+       
+       // only report state if occupied status has changed
+       If occupied <> newOccupied Then
+           Dim BattVolt As Integer = Device.BatteryVoltage// Get battery voltage
+           Dim jData As Json = New Json
+           jData.Add("batteryVoltage", BattVolt)
+           'jData.Add("pitch", PitchRoll(0))
+           'jData.Add("roll", PitchRoll(1))
+           jData.Add("occupied", newOccupied)
+           Dim losantPayload As Json = New Json        
+           losantPayload.Add("data", jData)            
+           Lplan.Publish("losant/" + deviceId + "/state", losantPayload.ToListOfByte)
+           occupied = newOccupied
+       End If
+   End Event
+End Class
